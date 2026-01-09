@@ -3,6 +3,15 @@ import { VisualMeta, AspectRatio, ContentStyle, StoredAccount, AccountStatus } f
 
 let accountPool: StoredAccount[] = [];
 
+// Helper to safely get env vars without crashing if process is undefined (common in Vite/Browser)
+const getEnvKey = () => {
+  try {
+    return (typeof process !== 'undefined' && process.env) ? (process.env.API_KEY || '') : '';
+  } catch {
+    return '';
+  }
+};
+
 // Allow updating the pool from App.tsx
 export const setApiKeyPool = (accounts: StoredAccount[]) => {
   accountPool = accounts.filter(acc => acc.isActive && acc.status === AccountStatus.GOOD);
@@ -17,7 +26,7 @@ export const smartExtractCredentials = (text: string): string | null => {
 };
 
 // Validate API Key using gemini-3-flash-preview
-export const validateApiKey = async (apiKey: string): Promise<{ status: AccountStatus }> => {
+export const validateApiKey = async (apiKey: string): Promise<{ status: AccountStatus; error?: string }> => {
   try {
     const ai = new GoogleGenAI({ apiKey });
     // Minimal request to check validity
@@ -27,12 +36,14 @@ export const validateApiKey = async (apiKey: string): Promise<{ status: AccountS
     });
     return { status: AccountStatus.GOOD };
   } catch (error: any) {
+    console.error("[Key Validation Error]", error);
     const msg = error.message?.toLowerCase() || '';
+    
     if (msg.includes('quota') || msg.includes('429')) {
-      return { status: AccountStatus.QUOTA_EXCEEDED };
+      return { status: AccountStatus.QUOTA_EXCEEDED, error: error.message };
     }
     // Assume dead/invalid for other errors (400, 403, 404, etc)
-    return { status: AccountStatus.DEAD };
+    return { status: AccountStatus.DEAD, error: error.message };
   }
 };
 
@@ -68,7 +79,8 @@ const getPaidAIClient = async () => {
     if (!hasKey) {
       await win.aistudio.openSelectKey();
     }
-    return new GoogleGenAI({ apiKey: process.env.API_KEY }); 
+    // Safe env access
+    return new GoogleGenAI({ apiKey: getEnvKey() }); 
   }
   return getAIClient();
 };

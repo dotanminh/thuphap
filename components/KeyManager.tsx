@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Key, Plus, RefreshCw, Trash2, ShieldCheck, Star } from 'lucide-react';
+import { Key, Plus, RefreshCw, Trash2, ShieldCheck, Star, AlertCircle } from 'lucide-react';
 import { StoredAccount, AccountStatus } from '../types';
 import { smartExtractCredentials, validateApiKey } from '../services/geminiService';
 
@@ -13,15 +13,19 @@ const KeyManager: React.FC<KeyManagerProps> = ({ accounts, onUpdateAccounts }) =
   const [selectedTier, setSelectedTier] = useState<'FREE' | 'ULTRA'>('FREE');
   const [isCheckingKeys, setIsCheckingKeys] = useState(false);
   const [showComparison, setShowComparison] = useState(false);
-  const [report, setReport] = useState({ success: 0, failed: 0, show: false });
+  const [report, setReport] = useState({ success: 0, failed: 0, show: false, lastError: '' });
 
   const handleAddKeys = async () => {
     if (!newKeysText.trim()) return;
     setIsCheckingKeys(true);
+    setReport({ success: 0, failed: 0, show: false, lastError: '' });
+
     const lines = newKeysText.split(/[\n\r]+/);
     const newAccounts: StoredAccount[] = [];
     let added = 0;
     let failed = 0;
+    let lastErrorMsg = '';
+
     const existingKeys = new Set(accounts.map(a => a.apiKey));
 
     for (const line of lines) {
@@ -41,12 +45,18 @@ const KeyManager: React.FC<KeyManagerProps> = ({ accounts, onUpdateAccounts }) =
                     usage: { requestsToday: 0, maxDailyRequests: 1500, lastResetDate: new Date().toISOString().split('T')[0], totalErrors: 0 }
                 });
                 added++;
-            } else failed++;
-        } else if (line.trim()) failed++;
+            } else {
+                failed++;
+                lastErrorMsg = validation.error || 'Lỗi không xác định';
+            }
+        } else if (line.trim()) {
+            failed++;
+            lastErrorMsg = 'Định dạng Key không hợp lệ (Không tìm thấy AIza...)';
+        }
     }
     if (added > 0) onUpdateAccounts([...accounts, ...newAccounts]);
     setNewKeysText('');
-    setReport({ success: added, failed, show: true });
+    setReport({ success: added, failed, show: true, lastError: lastErrorMsg });
     setIsCheckingKeys(false);
   };
 
@@ -76,9 +86,17 @@ const KeyManager: React.FC<KeyManagerProps> = ({ accounts, onUpdateAccounts }) =
                 <textarea value={newKeysText} onChange={(e) => setNewKeysText(e.target.value)} placeholder="Dán danh sách Key (mỗi dòng 1 key)..." className="w-full bg-black/30 border border-white/10 rounded-2xl p-4 text-sm text-white h-32 outline-none focus:border-yellow-500/50 resize-none font-mono" />
                 
                 {report.show && (
-                    <div className="mt-2 text-xs flex gap-3 font-bold">
-                        <span className="text-green-400">Thêm thành công: {report.success}</span>
-                        <span className="text-red-400">Lỗi/Trùng/Chết: {report.failed}</span>
+                    <div className="mt-3 bg-black/40 p-3 rounded-xl border border-white/5 text-xs">
+                        <div className="flex gap-4 font-bold mb-1">
+                            <span className="text-green-400">Thêm thành công: {report.success}</span>
+                            <span className="text-red-400">Lỗi/Trùng/Chết: {report.failed}</span>
+                        </div>
+                        {report.failed > 0 && (
+                            <div className="text-red-300 italic flex items-start gap-1 mt-1">
+                                <AlertCircle size={12} className="mt-0.5 shrink-0" /> 
+                                <span>Chi tiết lỗi cuối: {report.lastError}</span>
+                            </div>
+                        )}
                     </div>
                 )}
 
